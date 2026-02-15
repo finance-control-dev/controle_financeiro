@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import '../models/transaction_model.dart';
-import '../providers/transaction_provider.dart';
 import '../theme/app_theme.dart';
 
 class TransactionCard extends StatelessWidget {
@@ -19,20 +17,10 @@ class TransactionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isIncome = transaction.type == 'income';
     final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
-    final date = DateTime.parse('${transaction.date}T${transaction.time}');
+    final dateFormat = DateFormat('dd/MM/yyyy');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: Theme.of(context).brightness == Brightness.dark 
-            ? Colors.white.withOpacity(0.05) 
-            : Colors.black.withOpacity(0.05),
-        ),
-      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -40,49 +28,54 @@ class TransactionCard extends StatelessWidget {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              // Favorite Button
-              IconButton(
-                icon: Icon(
-                  transaction.favorite ? Icons.star : Icons.star_border,
-                  color: transaction.favorite ? AppTheme.accent : Colors.grey,
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isIncome
+                      ? AppTheme.primary.withOpacity(0.1)
+                      : AppTheme.error.withOpacity(0.1),
+                  shape: BoxShape.circle,
                 ),
-                onPressed: () {
-                  Provider.of<TransactionProvider>(context, listen: false)
-                      .toggleFavorite(transaction.id, transaction.favorite);
-                },
+                child: Icon(
+                  isIncome ? Icons.arrow_upward : Icons.arrow_downward,
+                  color: isIncome ? AppTheme.primary : AppTheme.error,
+                ),
               ),
-              const SizedBox(width: 8),
-              // Info
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       transaction.description,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${transaction.category.toUpperCase()} • ${dateFormat.format(date)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).textTheme.bodySmall?.color,
-                      ),
+                      '${transaction.category.toUpperCase()} • ${dateFormat.format(transaction.date)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey,
+                          ),
                     ),
                   ],
                 ),
               ),
-              // Amount
-              Text(
-                '${isIncome ? '+' : '-'}${currencyFormat.format(transaction.value)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isIncome ? AppTheme.primaryLight : AppTheme.danger,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${isIncome ? '+' : '-'}${currencyFormat.format(transaction.value)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: isIncome ? AppTheme.primary : AppTheme.error,
+                    ),
+                  ),
+                  if (transaction.isFavorite)
+                    const Icon(Icons.star, size: 16, color: AppTheme.secondary),
+                ],
               ),
             ],
           ),

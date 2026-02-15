@@ -13,8 +13,7 @@ class CustomDrawer extends StatelessWidget {
     final user = authProvider.user;
 
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      child: Column(
         children: [
           UserAccountsDrawerHeader(
             decoration: const BoxDecoration(
@@ -30,10 +29,13 @@ class CustomDrawer extends StatelessWidget {
             ),
             accountEmail: Text(user?.email ?? ''),
             currentAccountPicture: CircleAvatar(
-              backgroundImage: NetworkImage(
-                user?.photoURL ??
-                    'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
-              ),
+              backgroundColor: Colors.white,
+              backgroundImage: user?.photoURL != null
+                  ? NetworkImage(user!.photoURL!)
+                  : null,
+              child: user?.photoURL == null
+                  ? const Icon(Icons.person, color: AppTheme.primary)
+                  : null,
             ),
           ),
           ListTile(
@@ -41,7 +43,7 @@ class CustomDrawer extends StatelessWidget {
             title: const Text('Dashboard'),
             onTap: () {
                Navigator.pop(context); // Close drawer
-               // Home is main route, maybe just pop
+               Navigator.of(context).pushReplacementNamed('/home');
             },
           ),
           ListTile(
@@ -52,14 +54,6 @@ class CustomDrawer extends StatelessWidget {
                Navigator.of(context).pushNamed('/transactions');
             },
           ),
-           ListTile(
-            leading: const Icon(Icons.search_rounded),
-            title: const Text('Buscar'),
-            onTap: () {
-               Navigator.pop(context);
-               Navigator.of(context).pushNamed('/transactions'); // Search is inside transactions for now
-            },
-          ),
           ListTile(
             leading: const Icon(Icons.flag_rounded),
             title: const Text('Metas'),
@@ -68,19 +62,11 @@ class CustomDrawer extends StatelessWidget {
                Navigator.of(context).pushNamed('/goals');
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.pie_chart_rounded),
-            title: const Text('Gráficos'),
-             onTap: () {
-               Navigator.pop(context);
-               Navigator.of(context).pushNamed('/charts');
-            },
-          ),
           const Divider(),
           Consumer<AppProvider>(
             builder: (context, appProvider, child) {
-              return ListTile(
-                leading: Icon(
+              return SwitchListTile(
+                 secondary: Icon(
                   appProvider.themeMode == ThemeMode.dark
                       ? Icons.dark_mode
                       : Icons.light_mode,
@@ -90,28 +76,19 @@ class CustomDrawer extends StatelessWidget {
                       ? 'Modo Escuro'
                       : 'Modo Claro',
                 ),
-                trailing: Switch(
-                  value: appProvider.themeMode == ThemeMode.dark,
-                  onChanged: (value) => appProvider.toggleTheme(),
-                  activeColor: AppTheme.primary,
-                ),
+                value: appProvider.themeMode == ThemeMode.dark,
+                onChanged: (value) => appProvider.toggleTheme(),
               );
             },
           ),
-           ListTile(
-            leading: const Icon(Icons.language),
-            title: const Text('Idioma'),
-            trailing: const Text('PT-BR'), // Mock for now
-            onTap: () {
-               // appProvider.toggleLanguage();
-            },
-          ),
+          const Spacer(),
           const Divider(),
           ListTile(
-            leading: const Icon(Icons.logout, color: AppTheme.danger),
-            title: const Text('Sair', style: TextStyle(color: AppTheme.danger)),
+            leading: const Icon(Icons.logout, color: AppTheme.error),
+            title: const Text('Sair', style: TextStyle(color: AppTheme.error)),
             onTap: () => authProvider.signOut(),
           ),
+          const SizedBox(height: 24),
         ],
       ),
     );

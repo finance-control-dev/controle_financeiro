@@ -19,9 +19,10 @@ class SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: 160,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor, // Gradient background could be used here
+        color: backgroundColor, 
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
@@ -31,7 +32,7 @@ class SummaryCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withOpacity(0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 24),
@@ -40,10 +41,11 @@ class SummaryCard extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: 18, // Responsive sizing can be improved
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: color,
             ),
+             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
           Text(
@@ -51,7 +53,7 @@ class SummaryCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: color.withOpacity(0.7),
+              color: color.withOpacity(0.8),
             ),
           ),
         ],

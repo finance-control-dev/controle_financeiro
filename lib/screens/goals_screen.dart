@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../models/goal_model.dart';
 import '../providers/transaction_provider.dart';
+import '../models/goal_model.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 
@@ -12,18 +12,17 @@ class GoalsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final transactionProvider = Provider.of<TransactionProvider>(context);
-    final goals = transactionProvider.goals;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Metas Financeiras')),
-      body: goals.isEmpty
+      appBar: AppBar(title: const Text('Metas')),
+      body: transactionProvider.goals.isEmpty
           ? const Center(child: Text('Nenhuma meta cadastrada'))
           : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: goals.length,
+              itemCount: transactionProvider.goals.length,
               itemBuilder: (context, index) {
-                final goal = goals[index];
-                return _GoalCard(goal: goal);
+                final goal = transactionProvider.goals[index];
+                return _GoalItem(goal: goal);
               },
             ),
       floatingActionButton: FloatingActionButton(
@@ -34,23 +33,18 @@ class GoalsScreen extends StatelessWidget {
   }
 
   void _showAddGoalDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => const AddGoalDialog(),
-    );
+    showDialog(context: context, builder: (ctx) => const AddGoalDialog());
   }
 }
 
-class _GoalCard extends StatelessWidget {
+class _GoalItem extends StatelessWidget {
   final GoalModel goal;
-
-  const _GoalCard({required this.goal});
+  const _GoalItem({required this.goal});
 
   @override
   Widget build(BuildContext context) {
+    final progress = (goal.currentAmount / goal.targetAmount).clamp(0.0, 1.0);
     final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-    final progress = (goal.current / goal.target).clamp(0.0, 1.0);
-    final percentage = (progress * 100).toStringAsFixed(1);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -62,24 +56,16 @@ class _GoalCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  goal.description,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(
-                  '$percentage%',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: progress >= 1.0 ? AppTheme.success : AppTheme.primary,
-                  ),
-                ),
+                Text(goal.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text('${(progress * 100).toStringAsFixed(1)}%', 
+                     style: TextStyle(fontWeight: FontWeight.bold, color: progress >= 1 ? AppTheme.primary : AppTheme.secondary)),
               ],
             ),
             const SizedBox(height: 8),
             LinearProgressIndicator(
               value: progress,
-              backgroundColor: Colors.grey.withOpacity(0.2),
-              color: progress >= 1.0 ? AppTheme.success : AppTheme.primary,
+              color: progress >= 1 ? AppTheme.primary : AppTheme.secondary,
+              backgroundColor: Colors.grey[200],
               minHeight: 8,
               borderRadius: BorderRadius.circular(4),
             ),
@@ -87,14 +73,8 @@ class _GoalCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  currencyFormat.format(goal.current),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Meta: ${currencyFormat.format(goal.target)}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                ),
+                Text(currencyFormat.format(goal.currentAmount), style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text('Meta: ${currencyFormat.format(goal.targetAmount)}', style: const TextStyle(color: Colors.grey)),
               ],
             ),
           ],
@@ -113,12 +93,15 @@ class AddGoalDialog extends StatefulWidget {
 
 class _AddGoalDialogState extends State<AddGoalDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _descriptionController = TextEditingController();
+  final _descController = TextEditingController();
   final _targetController = TextEditingController();
   final _currentController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
+    final transactionProvider = Provider.of<TransactionProvider>(context, listen: false);
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+
     return AlertDialog(
       title: const Text('Nova Meta'),
       content: SingleChildScrollView(
@@ -128,39 +111,40 @@ class _AddGoalDialogState extends State<AddGoalDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
-                controller: _descriptionController,
+                controller: _descController,
                 decoration: const InputDecoration(labelText: 'Descrição'),
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'Informe a descrição' : null,
+                validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
               ),
               TextFormField(
                 controller: _targetController,
-                decoration: const InputDecoration(labelText: 'Valor da Meta (R\$)'),
                 keyboardType: TextInputType.number,
-                validator: (value) =>
-                    value == null || double.tryParse(value) == null ? 'Valor inválido' : null,
+                decoration: const InputDecoration(labelText: 'Meta (R\$)'),
+                validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
               ),
               TextFormField(
                 controller: _currentController,
-                decoration: const InputDecoration(labelText: 'Valor Atual (R\$)'),
                 keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Atual (R\$)'),
               ),
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(
           onPressed: () {
             if (_formKey.currentState!.validate()) {
-              // Add Goal Logic via Provider/Service directly
-              // Implementing directly here for brevity, best practice is via Provider method
+              final goal = GoalModel(
+                id: '', // Firestore generates
+                userId: user!.uid,
+                description: _descController.text,
+                targetAmount: double.parse(_targetController.text.replaceAll(',', '.')),
+                currentAmount: double.tryParse(_currentController.text.replaceAll(',', '.')) ?? 0.0,
+                order: DateTime.now().millisecondsSinceEpoch,
+              );
+              transactionProvider.addGoal(goal);
               Navigator.pop(context);
-              // TODO: Wire up to provider
             }
           },
           child: const Text('Salvar'),

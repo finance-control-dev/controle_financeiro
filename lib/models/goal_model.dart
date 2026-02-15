@@ -1,28 +1,31 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class GoalModel {
   final String id;
   final String userId;
   final String description;
-  final double target;
-  final double current;
+  final double targetAmount;
+  final double currentAmount;
   final int order;
 
   GoalModel({
     required this.id,
     required this.userId,
     required this.description,
-    required this.target,
-    required this.current,
+    required this.targetAmount,
+    required this.currentAmount,
     required this.order,
   });
 
-  factory GoalModel.fromMap(Map<String, dynamic> map, String id) {
+  factory GoalModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
     return GoalModel(
-      id: id,
-      userId: map['userId'] ?? '',
-      description: map['description'] ?? '',
-      target: (map['target'] ?? 0.0).toDouble(),
-      current: (map['current'] ?? 0.0).toDouble(),
-      order: map['order'] ?? 0,
+      id: doc.id,
+      userId: data['userId'] ?? '',
+      description: data['description'] ?? '',
+      targetAmount: (data['targetAmount'] ?? 0.0).toDouble(),
+      currentAmount: (data['currentAmount'] ?? 0.0).toDouble(),
+      order: data['order'] ?? 0,
     );
   }
 
@@ -30,8 +33,8 @@ class GoalModel {
     return {
       'userId': userId,
       'description': description,
-      'target': target,
-      'current': current,
+      'targetAmount': targetAmount,
+      'currentAmount': currentAmount,
       'order': order,
     };
   }

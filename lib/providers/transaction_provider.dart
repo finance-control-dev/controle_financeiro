@@ -1,157 +1,127 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/firestore_service.dart';
 import '../models/transaction_model.dart';
 import '../models/goal_model.dart';
+import 'dart:async';
 
 class TransactionProvider with ChangeNotifier {
+  FirestoreService? _firestoreService;
+  StreamSubscription? _transactionSubscription;
+  StreamSubscription? _goalsSubscription;
+
   List<TransactionModel> _transactions = [];
   List<GoalModel> _goals = [];
-  User? _user;
   bool _isLoading = false;
-  
+
   // Filters
   String _filterDescription = '';
-  String? _filterCategory;
-  String? _filterType;
-  int? _filterYear;
-  bool _filterFavorites = false;
-  List<int> _filterMonths = [];
+  String? _filterType; // 'income' or 'expense'
 
-  List<TransactionModel> get transactions => _filterTransactions();
+  // Getters
+  List<TransactionModel> get transactions => _applyFilters(_transactions);
   List<GoalModel> get goals => _goals;
   bool get isLoading => _isLoading;
 
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-
-  void updateUser(User? user) {
-    _user = user;
-    if (_user != null) {
-      _fetchData();
-      _fetchGoals();
+  void updateAuth(User? user) {
+    if (user != null) {
+      _firestoreService = FirestoreService(userId: user.uid);
+      _initStreams();
     } else {
+      _firestoreService = null;
       _transactions = [];
       _goals = [];
+      _cancelStreams();
       notifyListeners();
     }
   }
 
-  void _fetchData() {
-    if (_user == null) return;
+  void _initStreams() {
     _isLoading = true;
-    _db
-        .collection('transactions')
-        .where('userId', isEqualTo: _user!.uid)
-        .where('deleted', isEqualTo: false)
-        .snapshots()
-        .listen((snapshot) {
-      _transactions = snapshot.docs
-          .map((doc) => TransactionModel.fromMap(doc.data(), doc.id))
-          .toList();
-      // Sort by date descending
-      _transactions.sort((a, b) => b.date.compareTo(a.date));
-      _isLoading = false;
-      notifyListeners();
-    });
+    notifyListeners();
+
+    _cancelStreams(); // Ensure no duplicates
+
+    if (_firestoreService != null) {
+      _transactionSubscription = _firestoreService!.getTransactionsStream().listen((data) {
+        _transactions = data;
+        _isLoading = false;
+        notifyListeners();
+      });
+
+      _goalsSubscription = _firestoreService!.getGoalsStream().listen((data) {
+        _goals = data;
+        notifyListeners();
+      });
+    }
   }
 
-   void _fetchGoals() {
-    if (_user == null) return;
-    _db
-        .collection('goals')
-        .where('userId', isEqualTo: _user!.uid)
-        .snapshots()
-        .listen((snapshot) {
-      _goals = snapshot.docs
-          .map((doc) => GoalModel.fromMap(doc.data(), doc.id))
-          .toList();
-      _goals.sort((a, b) => a.order.compareTo(b.order));
-      notifyListeners();
-    });
+  void _cancelStreams() {
+    _transactionSubscription?.cancel();
+    _goalsSubscription?.cancel();
   }
 
-  // Filtering Logic
-  void setFilters({
-    String? description,
-    String? category,
-    String? type,
-    int? year,
-    bool? favorites,
-    List<int>? months,
-  }) {
+  @override
+  void dispose() {
+    _cancelStreams();
+    super.dispose();
+  }
+
+  // Business Logic: Filters
+  void setFilters({String? description, String? type}) {
     if (description != null) _filterDescription = description;
-    _filterCategory = category; // Allow null to clear
-    _filterType = type; // Allow null to clear
-    _filterYear = year; // Allow null to clear
-    if (favorites != null) _filterFavorites = favorites;
-    if (months != null) _filterMonths = months;
-    
+    _filterType = type; // Can be null to clear
     notifyListeners();
   }
-
+  
   void clearFilters() {
     _filterDescription = '';
-    _filterCategory = null;
     _filterType = null;
-    _filterYear = null;
-    _filterFavorites = false;
-    _filterMonths = [];
     notifyListeners();
   }
 
-  List<TransactionModel> _filterTransactions() {
-    return _transactions.where((tx) {
+  List<TransactionModel> _applyFilters(List<TransactionModel> list) {
+    return list.where((tx) {
       if (_filterDescription.isNotEmpty &&
           !tx.description.toLowerCase().contains(_filterDescription.toLowerCase())) {
         return false;
       }
-      if (_filterCategory != null && tx.category != _filterCategory) return false;
-      if (_filterType != null && tx.type != _filterType) return false;
-      if (_filterFavorites && !tx.favorite) return false;
-
-      DateTime date = DateTime.parse(tx.date);
-      if (_filterYear != null && date.year != _filterYear) return false;
-      if (_filterMonths.isNotEmpty && !_filterMonths.contains(date.month)) return false;
-
+      if (_filterType != null && tx.type != _filterType) {
+        return false;
+      }
       return true;
     }).toList();
   }
-  
-  // CRUD Wrappers if needed, or stick to Service. 
-  // Ideally Provider calls Service. For simplicity here using direct Firestore or Service in UI.
-  // But let's add basic add here for cleaner UI code.
 
-  Future<void> addTransaction(TransactionModel tx) async {
-    if (_user == null) return;
-    await _db.collection('transactions').add(tx.toMap());
-  }
-  
-  Future<void> updateTransaction(TransactionModel tx) async {
-    if (_user == null) return;
-    await _db.collection('transactions').doc(tx.id).update(tx.toMap());
-  }
-
-  Future<void> deleteTransaction(String id) async {
-     await _db.collection('transactions').doc(id).update({
-      'deleted': true,
-      'deletedAt': DateTime.now().toIso8601String(),
-    });
-  }
-  
-  Future<void> toggleFavorite(String id, bool currentStatus) async {
-      await _db.collection('transactions').doc(id).update({
-      'favorite': !currentStatus,
-    });
-  }
-
-  // Calculations
-  double get totalIncome => transactions
-      .where((t) => t.type == 'income')
+  // Business Logic: Calculations
+  double get totalIncome => _transactions
+      .where((t) => t.type == 'income' && !t.isDeleted)
       .fold(0.0, (sum, t) => sum + t.value);
 
-  double get totalExpense => transactions
-      .where((t) => t.type == 'expense')
+  double get totalExpense => _transactions
+      .where((t) => t.type == 'expense' && !t.isDeleted)
       .fold(0.0, (sum, t) => sum + t.value);
 
   double get balance => totalIncome - totalExpense;
+
+  // Actions
+  Future<void> addTransaction(TransactionModel tx) async {
+    await _firestoreService?.addTransaction(tx);
+  }
+
+  Future<void> updateTransaction(TransactionModel tx) async {
+    await _firestoreService?.updateTransaction(tx);
+  }
+
+  Future<void> deleteTransaction(String id) async {
+    await _firestoreService?.deleteTransactionSoft(id);
+  }
+
+  Future<void> addGoal(GoalModel goal) async {
+    await _firestoreService?.addGoal(goal);
+  }
+  
+  Future<void> updateGoal(GoalModel goal) async {
+    await _firestoreService?.updateGoal(goal);
+  }
 }
