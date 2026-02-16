@@ -1,60 +1,54 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'theme/app_theme.dart';
-import 'providers/auth_provider.dart';
+import 'providers/theme_provider.dart';
 import 'providers/transaction_provider.dart';
-import 'providers/app_provider.dart';
-import 'screens/splash_screen.dart';
-
-// Import Screens (to be created)
 import 'screens/home_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/transactions_screen.dart';
-import 'screens/goals_screen.dart';
+import 'theme/app_theme.dart';
+
+import 'package:firebase_core/firebase_core.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
-  await initializeDateFormatting('pt_BR', null);
-
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    print("Firebase initialization failed: $e. You might need to add google-services.json or GoogleService-Info.plist.");
+  }
+  
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProxyProvider<AuthProvider, TransactionProvider>(
-          create: (_) => TransactionProvider(),
-          update: (_, auth, transactionProvider) =>
-              transactionProvider!..updateAuth(auth.user),
-        ),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => TransactionProvider()),
       ],
-      child: const FinancialControlApp(),
+      child: const MyApp(),
     ),
   );
 }
 
-class FinancialControlApp extends StatelessWidget {
-  const FinancialControlApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final appProvider = Provider.of<AppProvider>(context);
-
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    
     return MaterialApp(
-      title: 'Financial Control',
+      title: 'Controle Financeiro',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: appProvider.themeMode,
-      home: const SplashScreen(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) => const HomeScreen(),
-        '/transactions': (context) => const TransactionsScreen(),
-        '/goals': (context) => const GoalsScreen(),
-      },
+      themeMode: themeProvider.themeMode,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('pt', 'BR'),
+      ],
+      home: const HomeScreen(),
     );
   }
 }

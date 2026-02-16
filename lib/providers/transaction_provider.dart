@@ -1,127 +1,149 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import '../models/transaction_model.dart';
-import '../models/goal_model.dart';
-import 'dart:async';
+import 'package:uuid/uuid.dart';
 
 class TransactionProvider with ChangeNotifier {
-  FirestoreService? _firestoreService;
-  StreamSubscription? _transactionSubscription;
-  StreamSubscription? _goalsSubscription;
-
-  List<TransactionModel> _transactions = [];
-  List<GoalModel> _goals = [];
+  List<Transaction> _transactions = [];
   bool _isLoading = false;
+  FirebaseFirestore? _firestore;
+  String _userId = 'test_user'; // Should come from AuthProvider
 
-  // Filters
-  String _filterDescription = '';
-  String? _filterType; // 'income' or 'expense'
-
-  // Getters
-  List<TransactionModel> get transactions => _applyFilters(_transactions);
-  List<GoalModel> get goals => _goals;
+  List<Transaction> get transactions => _transactions.where((t) => !t.deleted).toList();
   bool get isLoading => _isLoading;
 
-  void updateAuth(User? user) {
-    if (user != null) {
-      _firestoreService = FirestoreService(userId: user.uid);
-      _initStreams();
-    } else {
-      _firestoreService = null;
-      _transactions = [];
-      _goals = [];
-      _cancelStreams();
-      notifyListeners();
-    }
-  }
-
-  void _initStreams() {
-    _isLoading = true;
-    notifyListeners();
-
-    _cancelStreams(); // Ensure no duplicates
-
-    if (_firestoreService != null) {
-      _transactionSubscription = _firestoreService!.getTransactionsStream().listen((data) {
-        _transactions = data;
-        _isLoading = false;
-        notifyListeners();
-      });
-
-      _goalsSubscription = _firestoreService!.getGoalsStream().listen((data) {
-        _goals = data;
-        notifyListeners();
-      });
-    }
-  }
-
-  void _cancelStreams() {
-    _transactionSubscription?.cancel();
-    _goalsSubscription?.cancel();
-  }
-
-  @override
-  void dispose() {
-    _cancelStreams();
-    super.dispose();
-  }
-
-  // Business Logic: Filters
-  void setFilters({String? description, String? type}) {
-    if (description != null) _filterDescription = description;
-    _filterType = type; // Can be null to clear
-    notifyListeners();
-  }
-  
-  void clearFilters() {
-    _filterDescription = '';
-    _filterType = null;
-    notifyListeners();
-  }
-
-  List<TransactionModel> _applyFilters(List<TransactionModel> list) {
-    return list.where((tx) {
-      if (_filterDescription.isNotEmpty &&
-          !tx.description.toLowerCase().contains(_filterDescription.toLowerCase())) {
-        return false;
-      }
-      if (_filterType != null && tx.type != _filterType) {
-        return false;
-      }
-      return true;
-    }).toList();
-  }
-
-  // Business Logic: Calculations
-  double get totalIncome => _transactions
-      .where((t) => t.type == 'income' && !t.isDeleted)
+  // Totals
+  double get totalIncome => transactions
+      .where((t) => t.type == 'income')
       .fold(0.0, (sum, t) => sum + t.value);
 
-  double get totalExpense => _transactions
-      .where((t) => t.type == 'expense' && !t.isDeleted)
+  double get totalExpense => transactions
+      .where((t) => t.type == 'expense')
       .fold(0.0, (sum, t) => sum + t.value);
 
   double get balance => totalIncome - totalExpense;
 
-  // Actions
-  Future<void> addTransaction(TransactionModel tx) async {
-    await _firestoreService?.addTransaction(tx);
+  TransactionProvider() {
+    _initFirestore();
   }
 
-  Future<void> updateTransaction(TransactionModel tx) async {
-    await _firestoreService?.updateTransaction(tx);
+  Future<void> _initFirestore() async {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        _firestore = FirebaseFirestore.instance;
+        _loadTransactions();
+      } else {
+        // Fallback to mock data if Firebase not inited
+        print("Firebase not initialized in Provider");
+        _loadMockData();
+      }
+    } catch (e) {
+      print("Error initializing Firestore: $e");
+      _loadMockData();
+    }
+  }
+
+  void _loadMockData() {
+    _transactions = [
+      Transaction(
+        id: const Uuid().v4(),
+        description: 'Salário (Mock)',
+        value: 5000.0,
+        category: 'Salário',
+        date: DateTime.now().toString().split(' ')[0],
+        type: 'income',
+        userId: _userId,
+      ),
+      Transaction(
+        id: const Uuid().v4(),
+        description: 'Aluguel (Mock)',
+        value: 1500.0,
+        category: 'Moradia',
+        date: DateTime.now().toString().split(' ')[0],
+        type: 'expense',
+        userId: _userId,
+      ),
+    ];
+    notifyListeners();
+  }
+
+  Future<void> _loadTransactions() async {
+    if (_firestore == null) return;
+    
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final snapshot = await _firestore!
+          .collection('transactions')
+          .where('userId', isEqualTo: _userId)
+          .where('deleted', isEqualTo: false)
+          .get();
+
+      _transactions = snapshot.docs.map((doc) {
+        return Transaction.fromMap(doc.data(), doc.id);
+      }).toList();
+      
+      // Sort by date desc
+      _transactions.sort((a, b) => b.date.compareTo(a.date));
+      
+    } catch (e) {
+      print("Error fetching transactions: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> addTransaction(Transaction transaction) async {
+    // Optimistic update
+    _transactions.insert(0, transaction);
+    notifyListeners();
+
+    if (_firestore != null) {
+      try {
+        await _firestore!.collection('transactions').doc(transaction.id).set(transaction.toMap());
+      } catch (e) {
+        print("Error adding transaction to Firestore: $e");
+        // Rollback? or just let it stay locally
+      }
+    }
   }
 
   Future<void> deleteTransaction(String id) async {
-    await _firestoreService?.deleteTransactionSoft(id);
+    final index = _transactions.indexWhere((t) => t.id == id);
+    if (index != -1) {
+      // Optimistic update
+      _transactions[index] = _transactions[index].copyWith(deleted: true);
+      notifyListeners();
+
+      if (_firestore != null) {
+        try {
+          await _firestore!.collection('transactions').doc(id).update({'deleted': true});
+        } catch (e) {
+          print("Error deleting transaction in Firestore: $e");
+        }
+      }
+    }
   }
 
-  Future<void> addGoal(GoalModel goal) async {
-    await _firestoreService?.addGoal(goal);
-  }
-  
-  Future<void> updateGoal(GoalModel goal) async {
-    await _firestoreService?.updateGoal(goal);
+  Future<void> toggleFavorite(String id) async {
+    final index = _transactions.indexWhere((t) => t.id == id);
+    if (index != -1) {
+      final t = _transactions[index];
+      final newValue = !t.favorite;
+      
+      _transactions[index] = t.copyWith(favorite: newValue);
+      notifyListeners();
+
+      if (_firestore != null) {
+        try {
+          await _firestore!.collection('transactions').doc(id).update({'favorite': newValue});
+        } catch (e) {
+          print("Error updating favorite in Firestore: $e");
+        }
+      }
+    }
   }
 }

@@ -1,87 +1,76 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 
-class TransactionModel {
+class Transaction {
   final String id;
-  final String userId;
-  final String type; // 'income' or 'expense'
+  final String description;
   final double value;
   final String category;
-  final String description;
-  final DateTime date;
-  final bool isFavorite;
-  final bool isDeleted;
-  final DateTime? deletedAt;
+  final String date; // YYYY-MM-DD
+  final String type; // 'income' or 'expense'
+  final bool favorite;
+  final String userId;
+  final bool deleted;
 
-  TransactionModel({
+  Transaction({
     required this.id,
-    required this.userId,
-    required this.type,
+    required this.description,
     required this.value,
     required this.category,
-    required this.description,
     required this.date,
-    this.isFavorite = false,
-    this.isDeleted = false,
-    this.deletedAt,
+    required this.type,
+    this.favorite = false,
+    required this.userId,
+    this.deleted = false,
   });
 
-  // Factory for Firestore
-  factory TransactionModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return TransactionModel(
-      id: doc.id,
-      userId: data['userId'] ?? '',
-      type: data['type'] ?? 'expense',
-      value: (data['value'] ?? 0.0).toDouble(),
-      category: data['category'] ?? 'others',
-      description: data['description'] ?? '',
-      date: (data['date'] as Timestamp).toDate(),
-      isFavorite: data['isFavorite'] ?? false,
-      isDeleted: data['isDeleted'] ?? false,
-      deletedAt: data['deletedAt'] != null 
-          ? (data['deletedAt'] as Timestamp).toDate() 
-          : null,
-    );
-  }
-
-  // To Map for Firestore
   Map<String, dynamic> toMap() {
     return {
-      'userId': userId,
-      'type': type,
+      'id': id,
+      'description': description,
       'value': value,
       'category': category,
-      'description': description,
-      'date': Timestamp.fromDate(date),
-      'isFavorite': isFavorite,
-      'isDeleted': isDeleted,
-      'deletedAt': deletedAt != null ? Timestamp.fromDate(deletedAt!) : null,
+      'date': date,
+      'type': type,
+      'favorite': favorite,
+      'userId': userId,
+      'deleted': deleted,
     };
   }
 
-  TransactionModel copyWith({
+  factory Transaction.fromMap(Map<String, dynamic> map, String id) {
+    return Transaction(
+      id: id,
+      description: map['description'] ?? '',
+      value: (map['value'] ?? 0.0).toDouble(),
+      category: map['category'] ?? 'Outros',
+      date: map['date'] ?? '',
+      type: map['type'] ?? 'expense',
+      favorite: map['favorite'] ?? false,
+      userId: map['userId'] ?? '',
+      deleted: map['deleted'] ?? false,
+    );
+  }
+
+  Transaction copyWith({
     String? id,
-    String? userId,
-    String? type,
+    String? description,
     double? value,
     String? category,
-    String? description,
-    DateTime? date,
-    bool? isFavorite,
-    bool? isDeleted,
-    DateTime? deletedAt,
+    String? date,
+    String? type,
+    bool? favorite,
+    String? userId,
+    bool? deleted,
   }) {
-    return TransactionModel(
+    return Transaction(
       id: id ?? this.id,
-      userId: userId ?? this.userId,
-      type: type ?? this.type,
+      description: description ?? this.description,
       value: value ?? this.value,
       category: category ?? this.category,
-      description: description ?? this.description,
       date: date ?? this.date,
-      isFavorite: isFavorite ?? this.isFavorite,
-      isDeleted: isDeleted ?? this.isDeleted,
-      deletedAt: deletedAt ?? this.deletedAt,
+      type: type ?? this.type,
+      favorite: favorite ?? this.favorite,
+      userId: userId ?? this.userId,
+      deleted: deleted ?? this.deleted,
     );
   }
 }
